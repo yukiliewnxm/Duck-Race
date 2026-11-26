@@ -272,7 +272,7 @@ function startHost() {
   let F = { phase: "lobby", goal: 120, countEnd: 0, rid: 0, online: 0, d: [], rank: [] };
   const roster = new Map();            // id -> {n, c, on}
   const shown = new Map();             // id -> displayed progress
-  let rv = 0, lastRid = -1, ducks = new Map(), duckKey = "", W = 0, Hh = 0, resultsFor = -1, lastLb = 0;
+  let sheetOn = false, rv = 0, lastRid = -1, ducks = new Map(), duckKey = "", W = 0, Hh = 0, resultsFor = -1, lastLb = 0;
 
   const joinUrl = location.origin + "/";
   if (window.qrcode) { const q = qrcode(0, "M"); q.addData(joinUrl); q.make(); $("qr").innerHTML = q.createSvgTag(8, 2); }
@@ -282,7 +282,8 @@ function startHost() {
     () => conn.send({ t: "hello-host", pin }),
     m => {
       if (m.t === "pin-bad") { $("pinBox").classList.remove("hidden"); $("pinErr").textContent = pin ? "密码不对，请再试。" : ""; $("pinIn").focus(); }
-      else if (m.t === "host-ok") { $("pinBox").classList.add("hidden"); }
+      else if (m.t === "host-ok") { $("pinBox").classList.add("hidden"); sheetOn = !!m.sheet; }
+      else if (m.t === "saved") { const el = $("saveNote"); if (el) el.textContent = m.ok ? "✔ 结果已存进 Google Sheet" : "⚠ 结果没能存进 Google Sheet，请拍照留底"; }
       else if (m.t === "roster") {
         roster.clear();
         for (const r of m.list || []) if (Array.isArray(r)) roster.set(r[0], { n: String(r[1] || "鸭鸭"), c: (+r[2] || 0) % 8, on: !!r[3] });
@@ -425,7 +426,7 @@ function startHost() {
     const top = all.slice(0, 3);
     const order = [1, 0, 2].filter(i => top[i]);
     const box = $("res");
-    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h2>🏆 比赛结果</h2><span style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="againBtn">同一批人再来一局</button><button class="btn ghost" id="lobbyBtn" style="color:inherit">回到扫码页</button></span></div>' + (top.length ? "" : '<p>这局没有鸭鸭参加。</p>') +
+    box.innerHTML = '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap"><h2>🏆 比赛结果</h2><span style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn" id="againBtn">同一批人再来一局</button><button class="btn ghost" id="lobbyBtn" style="color:inherit">回到扫码页</button></span></div>' + (sheetOn ? '<p class="note" id="saveNote" style="margin:4px 0 0">正在存进 Google Sheet…</p>' : '') + (top.length ? "" : '<p>这局没有鸭鸭参加。</p>') +
       '<div class="podium">' + order.map(i => '<div class="pd p' + (i + 1) + '">' + duckSvg(nm(top[i].id).c) +
         '<div class="nm"></div><div class="t"></div><div class="blk">' + (i + 1) + '</div></div>').join("") + '</div>' +
       '<ol class="rest">' + all.slice(3).map(() => '<li><b></b><span></span><span class="t"></span></li>').join("") + '</ol>';

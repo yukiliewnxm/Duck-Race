@@ -7,6 +7,8 @@ const { WebSocketServer } = require("ws");
 
 const PORT = process.env.PORT || 3000;
 const HOST_PIN = process.env.HOST_PIN || "";      // 可选：在 Render 设置主持人密码
+const SHEET_URL = process.env.SHEET_URL || "";    // 可选：Google Sheet 结果记录的 Apps Script 网址
+const SHEET_KEY = process.env.SHEET_KEY || "";
 const MAX_PLAYERS = 120;
 const MAX_TAPS_PER_SEC = 15;                      // 防连点器
 
@@ -47,7 +49,7 @@ wss.on("connection", ws => {
     if (m.t === "hello-host") {
       if (HOST_PIN && String(m.pin || "") !== HOST_PIN) { send(ws, { t: "pin-bad" }); return; }
       ws.role = "host"; hosts.add(ws); ws.rosterSent = 0;
-      send(ws, { t: "host-ok" }); return;
+      send(ws, { t: "host-ok", sheet: !!SHEET_URL }); return;
     }
     if (m.t === "host" && ws.role === "host") { hostAction(m); return; }
 
@@ -119,7 +121,36 @@ function hostAction(m) {
 function finish() {
   if (G.phase !== "count" && G.phase !== "go") return;
   G.phase = "done"; pushAllYou();
+  saveResults();
 }
+
+// 每局结束，把结果写进 Google Sheet（有设 SHEET_URL 才会写）
+let lastSave = "";
+async function saveResults() {
+  if (!SHEET_URL) return;
+  const racers = [...players.values()].filter(inRace);
+  const done = G.rank.map(pid => players.get(pid)).filter(Boolean);
+  const rest = racers.filter(p => G.rank.indexOf(p.pid) < 0).sort((a, b) => b.taps - a.taps);
+  const rows = done.concat(rest).map((p, i) => ({
+    rank: i + 1, name: p.name, taps: p.taps, finished: G.rank.indexOf(p.pid) >= 0,
+    seconds: G.finT[p.pid] != null ? +(G.finT[p.pid] / 1000).toFixed(2) : ""
+  }));
+  if (!rows.length) return;
+  const body = JSON.stringify({ key: SHEET_KEY, time: now(), round: G.rid, goal: G.goal, rows });
+  lastSave = "saving";
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const r = await fetch(SHEET_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, body, redirect: "follow" });
+      const txt = await r.text();
+      let j = {}; try { j = JSON.parse(txt); } catch (e) {}
+      if (j.ok) { lastSave = "ok"; console.log("结果已存进 Google Sheet：" + rows.length + " 行"); broadcastSave(); return; }
+      console.error("Google Sheet 回应：" + txt.slice(0, 200));
+    } catch (e) { console.error("存 Google Sheet 失败（第 " + attempt + " 次）：" + e.message); }
+    await new Promise(r => setTimeout(r, 1500 * attempt));
+  }
+  lastSave = "fail"; broadcastSave();
+}
+function broadcastSave() { for (const h of hosts) send(h, { t: "saved", ok: lastSave === "ok" }); }
 
 function positions() {
   const racers = [...players.values()].filter(inRace);
