@@ -1,0 +1,16 @@
+{
+  "name": "duck-race",
+  "version": "1.0.0",
+  "description": "鸭鸭大赛跑 — 扫码狂点的实时派对游戏",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "qrcode-generator": "^1.4.4",
+    "ws": "^8.18.0"
+  }
+}
